@@ -13,6 +13,11 @@
           "title": "E-Mail",
           "minLength": 3,
           "ory.sh/kratos": {
+            "credentials": {
+              "password": {
+                "identifier": true
+              }
+            },
             "verification": {
               "via": "email"
             },
@@ -26,13 +31,17 @@
           "properties": {
             "first": {
               "title": "First Name",
-              "type": "string"
+              "type": "string",
+              "minLength": 1
             },
             "last": {
-              "title": "Last Name",
-              "type": "string"
+              "title": "Last Name", 
+              "type": "string",
+              "minLength": 1
             }
-          }
+          },
+          "required": ["first"],
+          "additionalProperties": false
         },
         "role": {
           "type": "string",
@@ -46,12 +55,11 @@
         },
         "avatar_url": {
           "type": "string",
-          "title": "Avatar URL"
+          "title": "Avatar URL",
+          "format": "uri"
         }
       },
-      "required": [
-        "email"
-      ],
+      "required": ["email"],
       "additionalProperties": false
     }
   }

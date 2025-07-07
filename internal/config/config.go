@@ -11,6 +11,7 @@ type Config struct {
 	Database DatabaseConfig
 	Logger   LoggerConfig
 	App      AppConfig
+	CORS     CORSConfig
 }
 
 type ServerConfig struct {
@@ -41,8 +42,15 @@ type AppConfig struct {
 	DefaultDataLimit int
 	MaxDataLimit     int
 	CacheTTL         time.Duration
-	KratosPublicURL  string
+	KratosPublicURL  string // Internal URL for service-to-service
 	KratosAdminURL   string
+	KratosBrowserURL string // External URL for browser redirects
+	FrontendURL      string // Frontend application URL
+}
+
+type CORSConfig struct {
+	AllowedOrigins []string
+	Debug          bool
 }
 
 // Load reads configuration from file and environment
@@ -92,6 +100,12 @@ func Load() (*Config, error) {
 			CacheTTL:         viper.GetDuration("CACHE_TTL"),
 			KratosPublicURL:  viper.GetString("KRATOS_PUBLIC_URL"),
 			KratosAdminURL:   viper.GetString("KRATOS_ADMIN_URL"),
+			KratosBrowserURL: viper.GetString("KRATOS_BROWSER_URL"),
+			FrontendURL:      viper.GetString("FRONTEND_URL"),
+		},
+		CORS: CORSConfig{
+			AllowedOrigins: viper.GetStringSlice("CORS_ORIGINS"),
+			Debug:          viper.GetBool("CORS_DEBUG"),
 		},
 	}
 
@@ -106,6 +120,7 @@ func setDefaults() {
 	viper.SetDefault("SERVER_WRITE_TIMEOUT", 15*time.Second)
 
 	// Database defaults
+	viper.SetDefault("DATABASE_URL", "postgres://trading:trading@postgres:5432/trading?sslmode=disable")
 	viper.SetDefault("DB_MAX_OPEN_CONNS", 25)
 	viper.SetDefault("DB_MAX_IDLE_CONNS", 5)
 	viper.SetDefault("DB_CONN_MAX_LIFETIME", 5*time.Minute)
@@ -122,6 +137,18 @@ func setDefaults() {
 	viper.SetDefault("DEFAULT_DATA_LIMIT", 30)
 	viper.SetDefault("MAX_DATA_LIMIT", 1000)
 	viper.SetDefault("CACHE_TTL", 5*time.Minute)
-	viper.SetDefault("KRATOS_PUBLIC_URL", "http://localhost:4433")
-	viper.SetDefault("KRATOS_ADMIN_URL", "http://localhost:4434")
+
+	// Kratos defaults - Internal vs External URLs
+	viper.SetDefault("KRATOS_PUBLIC_URL", "http://kratos:4433")     // Internal service-to-service
+	viper.SetDefault("KRATOS_ADMIN_URL", "http://kratos:4434")      // Internal service-to-service
+	viper.SetDefault("KRATOS_BROWSER_URL", "http://localhost:4433") // External browser access
+	viper.SetDefault("FRONTEND_URL", "http://localhost:8000")
+
+	// CORS defaults
+	viper.SetDefault("CORS_ORIGINS", []string{
+		"http://localhost:8000",
+		"http://localhost:4455",
+		"http://127.0.0.1:4455",
+	})
+	viper.SetDefault("CORS_DEBUG", false)
 }

@@ -1,6 +1,11 @@
 version: '3.8'
 
+networks:
+  trading-network:
+    driver: bridge
+
 services:
+  # Main application database
   postgres:
     image: postgres:15-alpine
     container_name: trading_postgres
@@ -18,7 +23,10 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
+    networks:
+      - trading-network
 
+  # Kratos database
   postgres-kratos:
     image: postgres:15-alpine
     container_name: kratos_postgres
@@ -36,9 +44,12 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
+    networks:
+      - trading-network
 
+  # Kratos migration
   kratos-migrate:
-    image: oryd/kratos:v1.0.0
+    image: oryd/kratos:v1.3.1
     container_name: kratos_migrate
     environment:
       - DSN=postgres://kratos:kratos@postgres-kratos:5432/kratos?sslmode=disable
@@ -49,36 +60,94 @@ services:
       postgres-kratos:
         condition: service_healthy
     restart: on-failure
+    networks:
+      - trading-network
 
+  # Kratos identity server
   kratos:
-    image: oryd/kratos:v1.0.0
+    image: oryd/kratos:v1.3.1
     container_name: kratos
     ports:
-      - "4433:4433" # public
-      - "4434:4434" # admin
+      - "4433:4433" # public API
+      - "4434:4434" # admin API
     environment:
       - DSN=postgres://kratos:kratos@postgres-kratos:5432/kratos?sslmode=disable
-      - LOG_LEVEL=trace
+      - LOG_LEVEL=info
+      - SERVE_PUBLIC_BASE_URL=http://localhost:4433/
+      - SERVE_ADMIN_BASE_URL=http://localhost:4434/
     volumes:
       - ./kratos:/etc/config/kratos
     command: serve -c /etc/config/kratos/kratos.yml --dev --watch-courier
     depends_on:
       - kratos-migrate
     restart: unless-stopped
+    networks:
+      - trading-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4433/health/ready"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
 
+  # Kratos self-service UI
   kratos-ui:
-    image: oryd/kratos-selfservice-ui-node:v1.0.0
+    image: oryd/kratos-selfservice-ui-node:v1.3.1
     container_name: kratos_ui
     ports:
       - "4455:4455"
     environment:
       - KRATOS_PUBLIC_URL=http://kratos:4433/
-      - KRATOS_BROWSER_URL=http://127.0.0.1:4433/
-      - COOKIE_SECRET=""
-      - CSRF_COOKIE_NAME=ory_kratos_ui
+      - KRATOS_BROWSER_URL=http://localhost:4433/
+      - BASE_URL=http://localhost:4455/
       - PORT=4455
+      - COOKIE_SECRET=XXX
+      - CSRF_COOKIE_NAME=__HOST-localhost-x-csrf-token  
+      - CSRF_COOKIE_SECRET=XXX
+      - DANGEROUSLY_DISABLE_SECURE_CSRF_COOKIES=true
     depends_on:
       - kratos
+    restart: unless-stopped
+    networks:
+      - trading-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4455/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Go trading service
+  trading-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: trading_service
+    network_mode: host  # Use host network so localhost works
+    environment:
+      # Database (need to use localhost since we're on host network)
+      - DATABASE_URL=postgres://trading:trading@localhost:5433/trading?sslmode=disable
+      
+      # Kratos URLs - Now localhost will work from container
+      - KRATOS_PUBLIC_URL=http://localhost:4433
+      - KRATOS_ADMIN_URL=http://localhost:4434
+      - KRATOS_BROWSER_URL=http://localhost:4433
+      
+      # Server config
+      - PORT=8080
+      - GIN_MODE=release
+      - ENVIRONMENT=production
+      - LOG_LEVEL=info
+      
+      # CORS origins
+      - CORS_ORIGINS=http://localhost:8000,http://localhost:4455,http://127.0.0.1:4455
+      
+      # Security
+      - SESSION_TIMEOUT=24h
+      - RATE_LIMIT=100
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kratos:
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:

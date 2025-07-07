@@ -1,64 +1,111 @@
-version: v1.0.0
+# Ory Kratos Configuration - Working for v1.3.1
+version: v1.3.1
 
+# Database connection
 dsn: postgres://kratos:kratos@postgres-kratos:5432/kratos?sslmode=disable
 
+# Server configuration
 serve:
   public:
-    base_url: http://127.0.0.1:4433/
+    base_url: http://localhost:4433/
     cors:
       enabled: true
       allowed_origins:
         - http://localhost:8000
-        - http://localhost:8080
+        - http://localhost:8080  
+        - http://localhost:4455
+        - http://127.0.0.1:4455
+        - http://127.0.0.1:8000
       allowed_methods:
         - POST
         - GET
         - PUT
         - PATCH
         - DELETE
+        - OPTIONS
+        - HEAD
       allowed_headers:
         - Authorization
         - Content-Type
         - Cookie
+        - X-Session-Token
+        - X-Requested-With
+        - Accept
+        - Origin
+        - X-CSRF-Token
+        - Cache-Control
       exposed_headers:
         - Content-Type
         - Set-Cookie
+        - X-Session-Token
+        - Location
       allow_credentials: true
+      max_age: 300
+      debug: false
   admin:
     base_url: http://kratos:4434/
 
+# Self-service flows configuration
 selfservice:
-  default_browser_return_url: http://localhost:8000/
+  default_browser_return_url: http://localhost:8000/dashboard
   allowed_return_urls:
     - http://localhost:8000
+    - http://localhost:8000/
     - http://localhost:8000/dashboard
+    - http://localhost:8000/login
+    - http://localhost:8000/auth
+    - http://127.0.0.1:8000
 
   methods:
+    # Disable password authentication (Google OAuth only)
     password:
       enabled: false
     
+    # Disable other auth methods
+    totp:
+      enabled: false
+    lookup_secret:
+      enabled: false
+    webauthn:
+      enabled: false
+    link:
+      enabled: false
+    code:
+      enabled: false
+      
+    # Enable OIDC (Google OAuth)
     oidc:
       enabled: true
       config:
         providers:
           - id: google
             provider: google
-            # Replace with your actual credentials
-            client_id: "your-google-client-id.apps.googleusercontent.com"
-            client_secret: "your-google-client-secret"
+            client_id: "XXX"
+            client_secret: "XXX"
             mapper_url: file:///etc/config/kratos/oidc.google.jsonnet
             scope:
+              - openid
               - email
               - profile
-              - openid
+            requested_claims:
+              id_token:
+                email:
+                  essential: true
+                email_verified:
+                  essential: true
+                given_name:
+                  essential: false
+                family_name:
+                  essential: false
+                picture:
+                  essential: false
 
   flows:
-    # Kratos will use its own UI for these
     error:
-      ui_url: http://127.0.0.1:4455/error
+      ui_url: http://localhost:4455/error
 
     settings:
-      ui_url: http://127.0.0.1:4455/settings
+      ui_url: http://localhost:4455/settings
       lifespan: 10m
 
     recovery:
@@ -72,45 +119,56 @@ selfservice:
         default_browser_return_url: http://localhost:8000/
 
     login:
-      ui_url: http://127.0.0.1:4455/login
-      lifespan: 10m
-
-    registration:
-      ui_url: http://127.0.0.1:4455/registration
+      ui_url: http://localhost:4455/login
       lifespan: 10m
       after:
-        password:
-          hooks:
-            - hook: session
-        oidc:
-          hooks:
-            - hook: session
+        default_browser_return_url: http://localhost:8000/dashboard
+        # No hooks for OIDC in v1.3.1 - sessions are created automatically
 
+    registration:
+      ui_url: http://localhost:4455/registration
+      lifespan: 10m
+      after:
+        default_browser_return_url: http://localhost:8000/dashboard
+        # No hooks for OIDC in v1.3.1 - sessions are created automatically
+
+# Session configuration
+session:
+  lifespan: 24h
+  cookie:
+    domain: localhost
+    path: /
+    same_site: Lax
+    persistent: true
+    name: ory_kratos_session
+
+# Logging configuration
 log:
-  level: debug
-  format: text
+  level: info
+  format: json
+  leak_sensitive_values: false
 
+# Security secrets (CHANGE THESE!)
 secrets:
   cookie:
-    - "32-character-secret-key-here-xxx"
+    - "XXX"
   cipher:
-    - "another-32-character-secret-here"
+    - "XXX"
 
+# Password hashing
 hashers:
   algorithm: bcrypt
   bcrypt:
     cost: 8
 
+# Identity schema
 identity:
   default_schema_id: default
   schemas:
     - id: default
       url: file:///etc/config/kratos/identity.schema.json
 
-cookies:
-  same_site: Lax
-  path: /
-
+# Courier (email) - disabled for simplicity
 courier:
   smtp:
     connection_uri: smtps://test:test@mailslurper:1025/?skip_ssl_verify=true
