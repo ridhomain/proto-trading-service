@@ -1,0 +1,116 @@
+version: v1.0.0
+
+dsn: postgres://kratos:kratos@postgres-kratos:5432/kratos?sslmode=disable
+
+serve:
+  public:
+    base_url: http://127.0.0.1:4433/
+    cors:
+      enabled: true
+      allowed_origins:
+        - http://localhost:8000
+        - http://localhost:8080
+      allowed_methods:
+        - POST
+        - GET
+        - PUT
+        - PATCH
+        - DELETE
+      allowed_headers:
+        - Authorization
+        - Content-Type
+        - Cookie
+      exposed_headers:
+        - Content-Type
+        - Set-Cookie
+      allow_credentials: true
+  admin:
+    base_url: http://kratos:4434/
+
+selfservice:
+  default_browser_return_url: http://localhost:8000/
+  allowed_return_urls:
+    - http://localhost:8000
+    - http://localhost:8000/dashboard
+
+  methods:
+    password:
+      enabled: false
+    
+    oidc:
+      enabled: true
+      config:
+        providers:
+          - id: google
+            provider: google
+            # Replace with your actual credentials
+            client_id: "your-google-client-id.apps.googleusercontent.com"
+            client_secret: "your-google-client-secret"
+            mapper_url: file:///etc/config/kratos/oidc.google.jsonnet
+            scope:
+              - email
+              - profile
+              - openid
+
+  flows:
+    # Kratos will use its own UI for these
+    error:
+      ui_url: http://127.0.0.1:4455/error
+
+    settings:
+      ui_url: http://127.0.0.1:4455/settings
+      lifespan: 10m
+
+    recovery:
+      enabled: false
+
+    verification:
+      enabled: false
+
+    logout:
+      after:
+        default_browser_return_url: http://localhost:8000/
+
+    login:
+      ui_url: http://127.0.0.1:4455/login
+      lifespan: 10m
+
+    registration:
+      ui_url: http://127.0.0.1:4455/registration
+      lifespan: 10m
+      after:
+        password:
+          hooks:
+            - hook: session
+        oidc:
+          hooks:
+            - hook: session
+
+log:
+  level: debug
+  format: text
+
+secrets:
+  cookie:
+    - "32-character-secret-key-here-xxx"
+  cipher:
+    - "another-32-character-secret-here"
+
+hashers:
+  algorithm: bcrypt
+  bcrypt:
+    cost: 8
+
+identity:
+  default_schema_id: default
+  schemas:
+    - id: default
+      url: file:///etc/config/kratos/identity.schema.json
+
+cookies:
+  same_site: Lax
+  path: /
+
+courier:
+  smtp:
+    connection_uri: smtps://test:test@mailslurper:1025/?skip_ssl_verify=true

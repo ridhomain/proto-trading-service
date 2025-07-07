@@ -1,0 +1,93 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: trading_postgres
+    environment:
+      POSTGRES_USER: trading
+      POSTGRES_PASSWORD: trading
+      POSTGRES_DB: trading
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U trading"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  postgres-kratos:
+    image: postgres:15-alpine
+    container_name: kratos_postgres
+    environment:
+      POSTGRES_USER: kratos
+      POSTGRES_PASSWORD: kratos
+      POSTGRES_DB: kratos
+    ports:
+      - "5434:5432"
+    volumes:
+      - kratos_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kratos"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  kratos-migrate:
+    image: oryd/kratos:v1.0.0
+    container_name: kratos_migrate
+    environment:
+      - DSN=postgres://kratos:kratos@postgres-kratos:5432/kratos?sslmode=disable
+    volumes:
+      - ./kratos:/etc/config/kratos
+    command: -c /etc/config/kratos/kratos.yml migrate sql -e --yes
+    depends_on:
+      postgres-kratos:
+        condition: service_healthy
+    restart: on-failure
+
+  kratos:
+    image: oryd/kratos:v1.0.0
+    container_name: kratos
+    ports:
+      - "4433:4433" # public
+      - "4434:4434" # admin
+    environment:
+      - DSN=postgres://kratos:kratos@postgres-kratos:5432/kratos?sslmode=disable
+      - LOG_LEVEL=trace
+      # Add your actual Google OAuth credentials here
+      - GOOGLE_CLIENT_ID=your-actual-client-id.apps.googleusercontent.com
+      - GOOGLE_CLIENT_SECRET=your-actual-client-secret
+      - SECRETS_COOKIE=your-32-character-secret-here-xxx
+      - SECRETS_CIPHER=another-32-character-secret-here
+    volumes:
+      - ./kratos:/etc/config/kratos
+    command: serve -c /etc/config/kratos/kratos.yml --dev --watch-courier
+    depends_on:
+      - kratos-migrate
+    restart: unless-stopped
+
+  kratos-ui:
+    image: oryd/kratos-selfservice-ui-node:v1.0.0
+    container_name: kratos_ui
+    ports:
+      - "4455:4455"
+    environment:
+      - KRATOS_PUBLIC_URL=http://kratos:4433/
+      - KRATOS_BROWSER_URL=http://127.0.0.1:4433/
+      - COOKIE_SECRET=please-change-this-secret-value
+      - CSRF_COOKIE_NAME=ory_kratos_ui
+      - PORT=4455
+    depends_on:
+      - kratos
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+  kratos_data:
+    driver: local
