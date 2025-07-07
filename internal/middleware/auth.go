@@ -37,7 +37,7 @@ func AuthRequired(kratosURL string) gin.HandlerFunc {
 		// Validate session with Kratos
 		session, err := validateSession(kratosURL, sessionToken)
 		if err != nil {
-			logger.Error("Failed to validate session", zap.Error(err))
+			logger.Error("Failed to validate session", zap.Error(err), zap.String("token_prefix", sessionToken[:10]+"..."))
 			c.JSON(http.StatusUnauthorized, gin.H{
 				"error": "Invalid session",
 			})
@@ -89,8 +89,14 @@ func RoleRequired(requiredRole string) gin.HandlerFunc {
 }
 
 // extractSessionToken gets the session token from various sources
+// Prioritize cookie for browser-based access
 func extractSessionToken(c *gin.Context) string {
-	// Try Authorization header first
+	// Try cookie first for better browser experience
+	if cookie, err := c.Cookie("ory_kratos_session"); err == nil && cookie != "" {
+		return cookie
+	}
+
+	// Then try headers for API clients
 	authHeader := c.GetHeader("Authorization")
 	if authHeader != "" {
 		parts := strings.Split(authHeader, " ")
@@ -99,14 +105,8 @@ func extractSessionToken(c *gin.Context) string {
 		}
 	}
 
-	// Try X-Session-Token header
 	if token := c.GetHeader("X-Session-Token"); token != "" {
 		return token
-	}
-
-	// Try cookie
-	if cookie, err := c.Cookie("ory_kratos_session"); err == nil {
-		return cookie
 	}
 
 	return ""
@@ -116,34 +116,43 @@ func extractSessionToken(c *gin.Context) string {
 func validateSession(kratosURL, sessionToken string) (*KratosSession, error) {
 	client := &http.Client{Timeout: 10 * time.Second}
 
+	// Create request
 	req, err := http.NewRequest("GET", kratosURL+"/sessions/whoami", nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
+	// Try all methods of session token delivery
+	// 1. As Bearer token
 	req.Header.Set("Authorization", "Bearer "+sessionToken)
+	// 2. As X-Session-Token
 	req.Header.Set("X-Session-Token", sessionToken)
+	// 3. As Cookie
 	req.AddCookie(&http.Cookie{
 		Name:  "ory_kratos_session",
 		Value: sessionToken,
 	})
 
+	// Make request
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("network error: %w", err)
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("invalid session: status %d", resp.StatusCode)
+	// Handle different status codes
+	switch resp.StatusCode {
+	case http.StatusOK:
+		var session KratosSession
+		if err := json.NewDecoder(resp.Body).Decode(&session); err != nil {
+			return nil, fmt.Errorf("decode error: %w", err)
+		}
+		return &session, nil
+	case http.StatusUnauthorized:
+		return nil, fmt.Errorf("unauthorized: invalid session")
+	default:
+		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
 	}
-
-	var session KratosSession
-	if err := json.NewDecoder(resp.Body).Decode(&session); err != nil {
-		return nil, err
-	}
-
-	return &session, nil
 }
 
 // GetUserID extracts user ID from context

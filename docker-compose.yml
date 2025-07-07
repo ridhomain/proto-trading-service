@@ -59,11 +59,6 @@ services:
     environment:
       - DSN=postgres://kratos:kratos@postgres-kratos:5432/kratos?sslmode=disable
       - LOG_LEVEL=trace
-      # Add your actual Google OAuth credentials here
-      - GOOGLE_CLIENT_ID=your-actual-client-id.apps.googleusercontent.com
-      - GOOGLE_CLIENT_SECRET=your-actual-client-secret
-      - SECRETS_COOKIE=your-32-character-secret-here-xxx
-      - SECRETS_CIPHER=another-32-character-secret-here
     volumes:
       - ./kratos:/etc/config/kratos
     command: serve -c /etc/config/kratos/kratos.yml --dev --watch-courier
@@ -79,7 +74,7 @@ services:
     environment:
       - KRATOS_PUBLIC_URL=http://kratos:4433/
       - KRATOS_BROWSER_URL=http://127.0.0.1:4433/
-      - COOKIE_SECRET=please-change-this-secret-value
+      - COOKIE_SECRET=""
       - CSRF_COOKIE_NAME=ory_kratos_ui
       - PORT=4455
     depends_on:

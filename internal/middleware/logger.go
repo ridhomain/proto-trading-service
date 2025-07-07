@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/ridhomain/proto-trading-service/pkg/logger"
 	"go.uber.org/zap"
@@ -102,23 +101,4 @@ func RequestID() gin.HandlerFunc {
 func generateRequestID() string {
 	// Simple implementation, consider using UUID in production
 	return fmt.Sprintf("%d", time.Now().UnixNano())
-}
-
-// CORS returns a gin middleware for CORS
-func CORS() gin.HandlerFunc {
-	config := cors.DefaultConfig()
-	config.AllowOrigins = []string{
-		"http://localhost:3000",
-		"http://localhost:8000",
-		"http://127.0.0.1:3000",
-		"http://127.0.0.1:4433",
-		"http://localhost:4433",
-	}
-	config.AllowMethods = []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"}
-	config.AllowHeaders = []string{"Origin", "Content-Type", "Accept", "Authorization", "X-Session-Token", "Cookie"}
-	config.ExposeHeaders = []string{"Content-Length", "Set-Cookie"}
-	config.AllowCredentials = true
-	config.MaxAge = 12 * time.Hour
-
-	return cors.New(config)
 }
